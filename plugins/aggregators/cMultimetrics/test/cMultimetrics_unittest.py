@@ -44,3 +44,7 @@ class InitTest(unittest.TestCase):
         self.assertRaises(TypeError, cMultimetrics, {"factor": "2"})
         self.assertRaises(TypeError, cMultimetrics, {"factor": 2.0})
         self.assertIn("'factor': 1000", str(cMultimetrics({"factor": 1000})))
+
+        # init quantile
+        self.assertIn("'quantile': [75, 90, 93, 94, 95, 96, 97, 98, 99]",
+                      str(cMultimetrics({})))

@@ -4,14 +4,16 @@
 
 typedef struct {
     PyObject_HEAD
-    //PyObject *log; /* substrings in metric name for determine timings */
-
-    int *quantile ; /* quantile list */
-    char *timings_is; /* substrings in metric name for determine timings */
-    int factor;
-    bool rps;
-    bool get_prc;
+    //PyObject *log;  /* python function logger */
+    char        *timings_is; /* substrings in metric name for determine timings */
+    bool        rps;
+    bool        get_prc;
+    int         factor;
+    int         *quantile; /* quantile list */
+    Py_ssize_t  quantile_size;
 } cMultimetrics;
+
+static int default_quantiles[] = {75, 90, 93, 94, 95, 96, 97, 98, 99};
 
 static void cMultimetrics_dealloc(cMultimetrics* self)
 {
@@ -29,13 +31,11 @@ cMultimetrics_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self = (cMultimetrics *)type->tp_alloc(type, 0);
     if (self != NULL) {
         self->timings_is = "_timings";
-
-        // XXX: TODO build quantile
-        //self->quantile = PyString_FromString("");
-
         self->factor = 1;
         self->rps = true;
         self->get_prc = false;
+        self->quantile = default_quantiles;
+        self->quantile_size = sizeof(default_quantiles)/sizeof(int);
     }
 
     return (PyObject *)self;
@@ -56,59 +56,70 @@ cMultimetrics_init(cMultimetrics *self, PyObject *args, PyObject *kwds)
         return -1;
     }
 
-    if (config) {
-        tmp = PyDict_GetItemString(config, "timings_is");
-        if (tmp){
+    if (!config) {
+        return -1;
+    }
+
+    tmp = PyDict_GetItemString(config, "timings_is");
+    if (tmp){
+        value = PyString_AsString(tmp);
+        if (!value){
+            return -1;
+        }
+
+        self->timings_is = PyString_AsString(tmp);
+    }
+
+    tmp = PyDict_GetItemString(config, "rps");
+    if (tmp) {
+        if (PyInt_Check(tmp)){
+            self->rps = (bool)PyInt_AS_LONG(tmp);
+        } else {
+            if (!PyString_Check(tmp)) {
+                PyErr_SetString(PyExc_TypeError,
+                                "rps should be yes/True or no/False");
+                return -1;
+            }
+
             value = PyString_AsString(tmp);
-            if (value){
-                self->timings_is = PyString_AsString(tmp);
-            } else{
+            if (value && (strcmp(value, "yes") != 0)) {
+                self->rps = false;
+            }
+        }
+    }
+    tmp = PyDict_GetItemString(config, "get_prc");
+    if (tmp) {
+        if (PyInt_Check(tmp)){
+            self->get_prc = (bool)PyInt_AS_LONG(tmp);
+        } else {
+            if (!PyString_Check(tmp)) {
+                PyErr_SetString(PyExc_TypeError,
+                                "get_prc should be yes/True or no/False");
                 return -1;
             }
-        }
-        tmp = PyDict_GetItemString(config, "rps");
-        if (tmp) {
-            if (PyInt_Check(tmp)){
-                self->rps = (bool)PyInt_AS_LONG(tmp);
-            } else {
-                if (!PyString_Check(tmp)) {
-                    PyErr_SetString(PyExc_TypeError,
-                                    "rps should be yes/True or no/False");
-                    return -1;
-                }
 
-                value = PyString_AsString(tmp);
-                if (value && (strcmp(value, "yes") != 0)) {
-                    self->rps = false;
-                }
+            value = PyString_AsString(tmp);
+            // by default get_prc is false
+            if (value && (strcmp(value, "yes") == 0)) {
+                self->get_prc = true;
             }
         }
-        tmp = PyDict_GetItemString(config, "get_prc");
-        if (tmp) {
-            if (PyInt_Check(tmp)){
-                self->get_prc = (bool)PyInt_AS_LONG(tmp);
-            } else {
-                if (!PyString_Check(tmp)) {
-                    PyErr_SetString(PyExc_TypeError,
-                                    "get_prc should be yes/True or no/False");
-                    return -1;
-                }
+    }
 
-                value = PyString_AsString(tmp);
-                // by default get_prc is false
-                if (value && (strcmp(value, "yes") == 0)) {
-                    self->get_prc = true;
-                }
-            }
+    tmp = PyDict_GetItemString(config, "factor");
+    if (tmp) {
+        if (!PyInt_Check(tmp)){
+            PyErr_SetString(PyExc_TypeError, "factor argument expect int");
+            return -1;
         }
-        tmp = PyDict_GetItemString(config, "factor");
-        if (tmp) {
-            if (PyInt_Check(tmp)){
-                self->factor = PyInt_AS_LONG(tmp);
-            } else {
-                PyErr_SetString(PyExc_TypeError, "factor argument expect int");
-                return -1;
-            }
+        self->factor = PyInt_AS_LONG(tmp);
+    }
+
+    tmp = PyDict_GetItemString(config, "quantile");
+    if (tmp) {
+        if (PyList_CheckExact(tmp)){
+            PyErr_SetString(PyExc_TypeError, "quantile argument expect list");
+            return -1;
         }
     }
     return 0;
@@ -119,17 +130,33 @@ cMultimetrics_repr(cMultimetrics *self){
     static PyObject *format = NULL;
     PyObject *args, *repr;
 
+    char *qstring;  // quantile string
+    char *tmp = "";
+    for (Py_ssize_t i = 0; i < self->quantile_size; i++) {
+        if (i)
+            tmp = qstring;
+        if (asprintf(&qstring, "%s%s%d",
+                     tmp, i?", ":"", self->quantile[i]) == -1){
+            return NULL;
+        }
+        if (i)
+            free(tmp);
+    }
+
+
     format = PyString_FromString("<%s({'timings_is': '%s', "
                                  "'rps': %s, "
                                  "'get_prc': %s, "
                                  "'factor': %s, "
-                                 "... })>");
-    args = Py_BuildValue("ssssi", self->ob_type->tp_name,
+                                 "'quantile': [%s]})>");
+    args = Py_BuildValue("ssssis", self->ob_type->tp_name,
                          self->timings_is,
                          self->rps ? "True": "False",
                          self->get_prc ? "True": "False",
-                         self->factor);
+                         self->factor,
+                         qstring);
     repr = PyString_Format(format, args);
+    free(qstring);
     return repr;
 }
 
