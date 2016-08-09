@@ -48,3 +48,8 @@ class InitTest(unittest.TestCase):
         # init quantile
         self.assertIn("'quantile': [75, 90, 93, 94, 95, 96, 97, 98, 99]",
                       str(cMultimetrics({})))
+        self.assertIn("'quantile': [15, 50, 90, 100]",
+                      str(cMultimetrics({"quantile": [15, 50, 90, 100]})))
+        self.assertIn("'quantile': [15, 50]",
+                      str(cMultimetrics({"quantile": [50, 15]})))
+        self.assertRaises(ValueError, cMultimetrics, {"quantile": [105, 1]})

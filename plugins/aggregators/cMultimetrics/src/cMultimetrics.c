@@ -117,10 +117,48 @@ cMultimetrics_init(cMultimetrics *self, PyObject *args, PyObject *kwds)
 
     tmp = PyDict_GetItemString(config, "quantile");
     if (tmp) {
-        if (PyList_CheckExact(tmp)){
+        if (!PyList_CheckExact(tmp)){
             PyErr_SetString(PyExc_TypeError, "quantile argument expect list");
             return -1;
         }
+        Py_ssize_t len = PyList_GET_SIZE(tmp);
+        if (len > 100){
+            PyErr_SetString(PyExc_ValueError, "upto 100 quantilies allowed");
+            return -1;
+        }
+
+        int *new_quantile = calloc(sizeof(int), len);
+        for (Py_ssize_t i = 0; i < len; i++) {
+            PyObject *v = PyList_GET_ITEM(tmp, i);
+            if (!PyInt_CheckExact(v)){
+                free(new_quantile);
+                PyErr_SetString(PyExc_ValueError,
+                                "quantile argument expect list of integers");
+                return -1;
+            }
+            long int q = PyInt_AS_LONG(v);
+            if (q < 0 || q > 100){
+                free(new_quantile);
+                PyErr_SetString(PyExc_ValueError,
+                                "quantile value out of range {0..100}");
+                return -1;
+            }
+            new_quantile[i] = (int)q;
+        }
+        self->quantile_size = len;
+
+        // For sorting
+        int my_cmp (const void * a, const void * b) {
+           return (*(int*)a - *(int*)b);
+        }
+        qsort(new_quantile, len, sizeof(int), my_cmp);
+
+        int *old_quantile = self->quantile;
+        if (old_quantile && old_quantile != default_quantiles){
+            free(old_quantile);
+            old_quantile = NULL;
+        }
+        self->quantile = new_quantile;
     }
     return 0;
 }
