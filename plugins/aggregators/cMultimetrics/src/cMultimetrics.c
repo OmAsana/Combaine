@@ -9,8 +9,8 @@ typedef struct {
     int *quantile ; /* quantile list */
     char *timings_is; /* substrings in metric name for determine timings */
     int factor;
-    int rps;
-    int get_prc;
+    bool rps;
+    bool get_prc;
 } cMultimetrics;
 
 static void cMultimetrics_dealloc(cMultimetrics* self)
@@ -35,7 +35,7 @@ cMultimetrics_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
         self->factor = 1;
         self->rps = true;
-        self->get_prc = 0;
+        self->get_prc = false;
     }
 
     return (PyObject *)self;
@@ -48,8 +48,9 @@ cMultimetrics_init(cMultimetrics *self, PyObject *args, PyObject *kwds)
     PyObject *tmp;
     PyObject *config = NULL;   // PyDictObject
 
-    if (! PyArg_ParseTuple(args, "O", &config))
+    if (! PyArg_ParseTuple(args, "O", &config)) {
         return -1;
+    }
     if (! PyDict_Check(config)){
         PyErr_SetString(PyExc_TypeError, "__init__ argument must be dict type");
         return -1;
@@ -59,26 +60,55 @@ cMultimetrics_init(cMultimetrics *self, PyObject *args, PyObject *kwds)
         tmp = PyDict_GetItemString(config, "timings_is");
         if (tmp){
             value = PyString_AsString(tmp);
-            if (value)
+            if (value){
                 self->timings_is = PyString_AsString(tmp);
+            } else{
+                return -1;
+            }
         }
         tmp = PyDict_GetItemString(config, "rps");
         if (tmp) {
             if (PyInt_Check(tmp)){
                 self->rps = (bool)PyInt_AS_LONG(tmp);
             } else {
-                if (PyString_Check(tmp)) {
-                    value = PyString_AsString(tmp);
-                } else {
+                if (!PyString_Check(tmp)) {
                     PyErr_SetString(PyExc_TypeError,
                                     "rps should be yes/True or no/False");
                     return -1;
                 }
-                if (value && (strcmp(value, "yes") != 0))
+
+                value = PyString_AsString(tmp);
+                if (value && (strcmp(value, "yes") != 0)) {
                     self->rps = false;
+                }
             }
+        }
+        tmp = PyDict_GetItemString(config, "get_prc");
+        if (tmp) {
+            if (PyInt_Check(tmp)){
+                self->get_prc = (bool)PyInt_AS_LONG(tmp);
+            } else {
+                if (!PyString_Check(tmp)) {
+                    PyErr_SetString(PyExc_TypeError,
+                                    "get_prc should be yes/True or no/False");
+                    return -1;
+                }
 
-
+                value = PyString_AsString(tmp);
+                // by default get_prc is false
+                if (value && (strcmp(value, "yes") == 0)) {
+                    self->get_prc = true;
+                }
+            }
+        }
+        tmp = PyDict_GetItemString(config, "factor");
+        if (tmp) {
+            if (PyInt_Check(tmp)){
+                self->factor = PyInt_AS_LONG(tmp);
+            } else {
+                PyErr_SetString(PyExc_TypeError, "factor argument expect int");
+                return -1;
+            }
         }
     }
     return 0;
@@ -89,11 +119,15 @@ cMultimetrics_repr(cMultimetrics *self){
     static PyObject *format = NULL;
     PyObject *args, *repr;
 
-    format = PyString_FromString("<%s({'timings_is': '%s', 'rps': %d, "
-                                 "'factor': %d... })>");
-    args = Py_BuildValue("ssii", self->ob_type->tp_name,
+    format = PyString_FromString("<%s({'timings_is': '%s', "
+                                 "'rps': %s, "
+                                 "'get_prc': %s, "
+                                 "'factor': %s, "
+                                 "... })>");
+    args = Py_BuildValue("ssssi", self->ob_type->tp_name,
                          self->timings_is,
-                         self->rps,
+                         self->rps ? "True": "False",
+                         self->get_prc ? "True": "False",
                          self->factor);
     repr = PyString_Format(format, args);
     return repr;
