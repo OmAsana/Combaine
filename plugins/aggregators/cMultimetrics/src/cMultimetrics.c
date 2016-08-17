@@ -200,48 +200,45 @@ cMultimetrics_repr(cMultimetrics *self){
 
 
 static PyObject *
-cMultimetrics_aggregate_host(cMultimetrics* self)
+cMultimetrics_aggregate_host(cMultimetrics* self, PyObject *args)
 {
-    static PyObject *format = NULL;
-    PyObject *args, *result;
+    long int prevtime, currtime;
+    char * payload;
+    PyObject *result;
 
-    if (format == NULL) {
-        format = PyString_FromString("%s -> %s :-)");
-        if (format == NULL)
-            return NULL;
+    if (! PyArg_ParseTuple(args, "sdd", &payload, &prevtime, &currtime)){
+        return NULL;
     }
 
-    args = Py_BuildValue("ss", "aggregate_host say", self->timings_is);
-    if (args == NULL)
-        return NULL;
-
-    result = PyString_Format(format, args);
-    Py_DECREF(args);
+    result = Py_BuildValue("{}");
 
     return result;
 }
 
 static PyObject *
-cMultimetrics_aggregate_group(cMultimetrics* self)
+cMultimetrics_aggregate_group(cMultimetrics* self, PyObject *args)
 {
-    static PyObject *format = NULL;
+    PyListObject *payload;
     PyObject *result;
 
-    if (format == NULL) {
-        format = PyString_FromString("aggregate_group: %s");
-        if (format == NULL)
-            return NULL;
+    if (! PyArg_ParseTuple(args, "O", &payload)) {
+        return NULL;
     }
-    result = PyString_Format(format, PyString_FromString(self->timings_is));
+    if (! PyList_CheckExact(payload)){
+        PyErr_SetString(PyExc_TypeError, "aggregate_group takes list as payload");
+        return NULL;
+    }
+
+    result = Py_BuildValue("{}");
 
     return result;
 }
 
 static PyMethodDef cMultimetrics_methods[] = {
-    {"aggregate_host", (PyCFunction)cMultimetrics_aggregate_host, METH_NOARGS,
+    {"aggregate_host", (PyCFunction)cMultimetrics_aggregate_host, METH_VARARGS,
      "Make aggregation for single host"
     },
-    {"aggregate_group", (PyCFunction)cMultimetrics_aggregate_group, METH_NOARGS,
+    {"aggregate_group", (PyCFunction)cMultimetrics_aggregate_group, METH_VARARGS,
      "Make aggregation group of hosts"
     },
     {NULL}  /* Sentinel */

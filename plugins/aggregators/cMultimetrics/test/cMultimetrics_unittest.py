@@ -16,7 +16,7 @@ class InitTest(unittest.TestCase):
     "Tries to create object of cMultimetrics class"
 
     def runTest(self):
-        from cMultimetrics import cMultimetrics
+        from cMultimetrics import cMultimetrics  # pylint: disable=import-error
         cmm = cMultimetrics({})
         self.assertIsNotNone(cmm)
 
@@ -39,7 +39,6 @@ class InitTest(unittest.TestCase):
         self.assertIn("'timings_is': 'my_custom_timings'",
                       str(cMultimetrics({"timings_is": "my_custom_timings"})))
 
-
         # init factor
         self.assertRaises(TypeError, cMultimetrics, {"factor": "2"})
         self.assertRaises(TypeError, cMultimetrics, {"factor": 2.0})
@@ -53,3 +52,25 @@ class InitTest(unittest.TestCase):
         self.assertIn("'quantile': [15, 50]",
                       str(cMultimetrics({"quantile": [50, 15]})))
         self.assertRaises(ValueError, cMultimetrics, {"quantile": [105, 1]})
+
+
+class AggregateHostTest(unittest.TestCase):
+
+    def runTest(self):
+        from cMultimetrics import cMultimetrics  # pylint: disable=import-error
+        mm = cMultimetrics({})
+
+        self.assertTrue(hasattr(mm, "aggregate_host"))
+        self.assertEqual(mm.aggregate_host("", 0, 61), {})
+
+
+class AggregateGroupTest(unittest.TestCase):
+
+    def runTest(self):
+        from cMultimetrics import cMultimetrics  # pylint: disable=import-error
+        mm = cMultimetrics({})
+
+        self.assertTrue(hasattr(mm, "aggregate_group"))
+        self.assertRaises(TypeError, mm.aggregate_group, "not a list")
+        self.assertRaises(TypeError, mm.aggregate_group, 100500)
+        self.assertEqual(mm.aggregate_group([]), {})
