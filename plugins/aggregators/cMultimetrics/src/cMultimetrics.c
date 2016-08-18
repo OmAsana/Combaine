@@ -6,6 +6,7 @@ typedef struct {
     PyObject_HEAD
     //PyObject *log;  /* python function logger */
     char        *timings_is; /* substrings in metric name for determine timings */
+    Py_ssize_t  len_timings_is;
     bool        rps;
     bool        get_prc;
     int         factor;
@@ -68,6 +69,7 @@ cMultimetrics_init(cMultimetrics *self, PyObject *args, PyObject *kwds)
         }
 
         self->timings_is = PyString_AsString(tmp);
+        self->len_timings_is = strlen(self->timings_is);
     }
 
     tmp = PyDict_GetItemString(config, "rps");
@@ -210,8 +212,73 @@ cMultimetrics_aggregate_host(cMultimetrics* self, PyObject *args)
         return NULL;
     }
 
-    result = Py_BuildValue("{}");
+    result = PyDict_New();
+    if (! result)
+        return NULL;
 
+    char const *buffer_end = payload + strlen(payload);
+    char const *next = payload;
+    char const *cursor = payload;
+    char const *space_at = NULL;
+
+    if (next == buffer_end)  // empty string?
+      return result;
+
+    PyObject *key;
+    PyObject *value;
+    char *_;
+    int metric_len;
+
+    while ((next = memchr(next, '\n', buffer_end - next))) {
+        if ((space_at = memchr(cursor, ' ', next - cursor))){
+
+            metric_len = (space_at - cursor);
+            space_at = space_at + 1;
+
+            key = PyString_FromStringAndSize(cursor, metric_len);
+
+            if (memmem(cursor, metric_len, self->timings_is, self->len_timings_is) == NULL){
+                // is timings
+
+            } else {
+                // is counter
+
+                value = PyString_FromStringAndSize(space_at, next - space_at);
+                value = PyFloat_FromString(value, &_);
+                if (value != NULL){
+                    PyDict_SetItem(result, key, value);
+                }
+            }
+        }
+        if (next == buffer_end)
+            break;
+        cursor = ++next;
+    }
+    // TODO: get rid of the duplication of code here
+    if (buffer_end - cursor > 0){  // line without newline at end
+        if ((space_at = memchr(cursor, ' ', buffer_end - cursor))){
+
+            metric_len = (space_at - cursor);
+            space_at = space_at + 1;
+
+            key = PyString_FromStringAndSize(cursor, metric_len);
+
+            if (memmem(cursor, metric_len, self->timings_is, self->len_timings_is) == NULL){
+                // is timings
+
+            } else {
+                // is counter
+
+                value = PyString_FromStringAndSize(space_at, buffer_end - space_at);
+                value = PyFloat_FromString(value, &_);
+                if (value != NULL){
+                    PyDict_SetItem(result, key, value);
+                }
+            }
+        }
+    }
+
+    Py_INCREF(result);
     return result;
 }
 
@@ -229,7 +296,8 @@ cMultimetrics_aggregate_group(cMultimetrics* self, PyObject *args)
         return NULL;
     }
 
-    result = Py_BuildValue("{}");
+    result = PyDict_New();
+
 
     return result;
 }
@@ -311,3 +379,5 @@ initcMultimetrics(void)
     Py_INCREF(&cMultimetricsType);
     PyModule_AddObject(m, "cMultimetrics", (PyObject *)&cMultimetricsType);
 }
+
+// vim: si et sw=4 sts=4 ts=4

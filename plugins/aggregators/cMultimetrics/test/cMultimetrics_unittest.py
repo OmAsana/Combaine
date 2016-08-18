@@ -35,6 +35,7 @@ class InitTest(unittest.TestCase):
         self.assertRaises(TypeError, cMultimetrics, {"get_prc": dict()})
 
         # init timings_is
+        self.assertIn("'timings_is': '_timings'", str(cMultimetrics({})))
         self.assertRaises(TypeError, cMultimetrics, {"timings_is": int()})
         self.assertIn("'timings_is': 'my_custom_timings'",
                       str(cMultimetrics({"timings_is": "my_custom_timings"})))
@@ -58,10 +59,19 @@ class AggregateHostTest(unittest.TestCase):
 
     def runTest(self):
         from cMultimetrics import cMultimetrics  # pylint: disable=import-error
-        mm = cMultimetrics({})
+        mm = cMultimetrics({"rps": False})
 
         self.assertTrue(hasattr(mm, "aggregate_host"))
         self.assertEqual(mm.aggregate_host("", 0, 61), {})
+        self.assertEqual(mm.aggregate_host("metric1 200.1\nm2 30\n", 0, 61),
+                         {"metric1": 200.1, "m2": 30.0})
+
+        # double check ensure that string passed as pyaload not modified
+        self.assertEqual(mm.aggregate_host("metric1 200.1\nm2 30\n", 0, 61),
+                         {"metric1": 200.1, "m2": 30.0})
+
+        self.assertEqual(mm.aggregate_host("first 99.9\nlast 30", 0, 61),
+                         {"first": 99.9, "last": 30.0})
 
 
 class AggregateGroupTest(unittest.TestCase):
@@ -74,3 +84,4 @@ class AggregateGroupTest(unittest.TestCase):
         self.assertRaises(TypeError, mm.aggregate_group, "not a list")
         self.assertRaises(TypeError, mm.aggregate_group, 100500)
         self.assertEqual(mm.aggregate_group([]), {})
+        self.assertEqual(mm.aggregate_group([{}, {}]), {})
